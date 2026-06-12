@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import AppLayout from '@/components/layout/AppLayout'
-import { mockProperties } from '@/lib/mock-data'
-import { PropertyStatus, PropertyType } from '@/types'
+import { createClient } from '@/lib/supabase/client'
+import { Property, PropertyStatus, PropertyType } from '@/types'
 import { Search, Plus, MapPin, Maximize2, DoorOpen, Building2, Home, Landmark, TreePine } from 'lucide-react'
 
 const statusLabel: Record<PropertyStatus, string> = {
@@ -44,10 +44,20 @@ const filterOptions = [
 ]
 
 export default function PropertiesPage() {
+  const [properties, setProperties] = useState<Property[]>([])
+  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
 
-  const filtered = mockProperties.filter(p => {
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.from('properties').select('*').order('created_at', { ascending: false }).then(({ data }) => {
+      setProperties((data ?? []) as Property[])
+      setLoading(false)
+    })
+  }, [])
+
+  const filtered = properties.filter(p => {
     const matchStatus = statusFilter === 'all' || p.status === statusFilter
     const matchSearch = !search ||
       p.title.toLowerCase().includes(search.toLowerCase()) ||
@@ -59,7 +69,7 @@ export default function PropertiesPage() {
   return (
     <AppLayout
       title="Objekte"
-      subtitle={`${mockProperties.length} Immobilien im Portfolio`}
+      subtitle={loading ? 'Wird geladen…' : `${properties.length} Immobilien im Portfolio`}
       actions={
         <button
           style={{
@@ -128,7 +138,7 @@ export default function PropertiesPage() {
       {/* Stats row */}
       <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
         {(['available', 'reserved', 'sold'] as PropertyStatus[]).map(status => {
-          const count = mockProperties.filter(p => p.status === status).length
+          const count = properties.filter(p => p.status === status).length
           const sc = statusColor[status]
           return (
             <div
@@ -151,119 +161,126 @@ export default function PropertiesPage() {
         })}
       </div>
 
+      {/* Loading */}
+      {loading && (
+        <div style={{ padding: '80px', textAlign: 'center', color: '#444444', fontSize: '0.875rem' }}>
+          Wird geladen…
+        </div>
+      )}
+
       {/* Cards Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
-        {filtered.map(property => {
-          const sc = statusColor[property.status]
-          const TypeIcon = typeIcon[property.type]
-          return (
-            <div
-              key={property.id}
-              style={{
-                backgroundColor: '#111111',
-                border: '1px solid #1e1e1e',
-                borderRadius: '10px',
-                overflow: 'hidden',
-                cursor: 'pointer',
-                transition: 'border-color 0.15s, transform 0.15s',
-              }}
-              onMouseEnter={e => {
-                const el = e.currentTarget as HTMLElement
-                el.style.borderColor = '#333333'
-                el.style.transform = 'translateY(-2px)'
-              }}
-              onMouseLeave={e => {
-                const el = e.currentTarget as HTMLElement
-                el.style.borderColor = '#1e1e1e'
-                el.style.transform = 'translateY(0)'
-              }}
-            >
-              {/* Image placeholder */}
+      {!loading && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
+          {filtered.map(property => {
+            const sc = statusColor[property.status]
+            const TypeIcon = typeIcon[property.type]
+            return (
               <div
+                key={property.id}
                 style={{
-                  height: '160px',
-                  background: 'linear-gradient(135deg, #161616 0%, #1a1a1a 100%)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  position: 'relative',
+                  backgroundColor: '#111111',
+                  border: '1px solid #1e1e1e',
+                  borderRadius: '10px',
+                  overflow: 'hidden',
+                  cursor: 'pointer',
+                  transition: 'border-color 0.15s, transform 0.15s',
+                }}
+                onMouseEnter={e => {
+                  const el = e.currentTarget as HTMLElement
+                  el.style.borderColor = '#333333'
+                  el.style.transform = 'translateY(-2px)'
+                }}
+                onMouseLeave={e => {
+                  const el = e.currentTarget as HTMLElement
+                  el.style.borderColor = '#1e1e1e'
+                  el.style.transform = 'translateY(0)'
                 }}
               >
-                <TypeIcon size={48} color="#2a2a2a" />
-                <div style={{ position: 'absolute', top: '12px', right: '12px' }}>
-                  <span
-                    style={{
-                      backgroundColor: sc.bg,
-                      border: `1px solid ${sc.text}33`,
-                      color: sc.text,
-                      fontSize: '0.75rem',
-                      fontWeight: 600,
-                      padding: '4px 10px',
-                      borderRadius: '20px',
-                    }}
-                  >
-                    {statusLabel[property.status]}
-                  </span>
-                </div>
-                <div style={{ position: 'absolute', top: '12px', left: '12px' }}>
-                  <span
-                    style={{
-                      backgroundColor: 'rgba(0,0,0,0.6)',
-                      color: '#999999',
-                      fontSize: '0.6875rem',
-                      padding: '3px 8px',
-                      borderRadius: '4px',
-                    }}
-                  >
-                    {typeLabel[property.type]}
-                  </span>
-                </div>
-              </div>
-
-              {/* Content */}
-              <div style={{ padding: '16px' }}>
-                <h3 style={{ margin: '0 0 6px', color: '#eeeeee', fontSize: '0.9375rem', fontWeight: 600, lineHeight: 1.3 }}>
-                  {property.title}
-                </h3>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
-                  <MapPin size={12} color="#555555" />
-                  <span style={{ color: '#666666', fontSize: '0.8125rem' }}>{property.address}</span>
-                </div>
-
-                {/* Specs */}
-                <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                    <Maximize2 size={12} color="#555555" />
-                    <span style={{ color: '#888888', fontSize: '0.8125rem' }}>
-                      {property.type === 'land' ? `${property.size} m²` : `${property.size} m²`}
+                {/* Image placeholder */}
+                <div
+                  style={{
+                    height: '160px',
+                    background: 'linear-gradient(135deg, #161616 0%, #1a1a1a 100%)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    position: 'relative',
+                  }}
+                >
+                  <TypeIcon size={48} color="#2a2a2a" />
+                  <div style={{ position: 'absolute', top: '12px', right: '12px' }}>
+                    <span
+                      style={{
+                        backgroundColor: sc.bg,
+                        border: `1px solid ${sc.text}33`,
+                        color: sc.text,
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        padding: '4px 10px',
+                        borderRadius: '20px',
+                      }}
+                    >
+                      {statusLabel[property.status]}
                     </span>
                   </div>
-                  {property.rooms > 0 && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                      <DoorOpen size={12} color="#555555" />
-                      <span style={{ color: '#888888', fontSize: '0.8125rem' }}>{property.rooms} Zimmer</span>
-                    </div>
-                  )}
+                  <div style={{ position: 'absolute', top: '12px', left: '12px' }}>
+                    <span
+                      style={{
+                        backgroundColor: 'rgba(0,0,0,0.6)',
+                        color: '#999999',
+                        fontSize: '0.6875rem',
+                        padding: '3px 8px',
+                        borderRadius: '4px',
+                      }}
+                    >
+                      {typeLabel[property.type]}
+                    </span>
+                  </div>
                 </div>
 
-                {/* Price */}
-                <div style={{ borderTop: '1px solid #1c1c1c', paddingTop: '12px' }}>
-                  <span style={{ color: '#6366f1', fontSize: '1.125rem', fontWeight: 700 }}>
-                    {formatPrice(property.price)}
-                  </span>
+                {/* Content */}
+                <div style={{ padding: '16px' }}>
+                  <h3 style={{ margin: '0 0 6px', color: '#eeeeee', fontSize: '0.9375rem', fontWeight: 600, lineHeight: 1.3 }}>
+                    {property.title}
+                  </h3>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
+                    <MapPin size={12} color="#555555" />
+                    <span style={{ color: '#666666', fontSize: '0.8125rem' }}>{property.address}</span>
+                  </div>
+
+                  {/* Specs */}
+                  <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <Maximize2 size={12} color="#555555" />
+                      <span style={{ color: '#888888', fontSize: '0.8125rem' }}>{property.size} m²</span>
+                    </div>
+                    {property.rooms > 0 && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <DoorOpen size={12} color="#555555" />
+                        <span style={{ color: '#888888', fontSize: '0.8125rem' }}>{property.rooms} Zimmer</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Price */}
+                  <div style={{ borderTop: '1px solid #1c1c1c', paddingTop: '12px' }}>
+                    <span style={{ color: '#6366f1', fontSize: '1.125rem', fontWeight: 700 }}>
+                      {formatPrice(property.price)}
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
-          )
-        })}
+            )
+          })}
 
-        {filtered.length === 0 && (
-          <div style={{ gridColumn: '1/-1', padding: '48px', textAlign: 'center', color: '#444444', fontSize: '0.875rem' }}>
-            Keine Objekte gefunden
-          </div>
-        )}
-      </div>
+          {filtered.length === 0 && (
+            <div style={{ gridColumn: '1/-1', padding: '48px', textAlign: 'center', color: '#444444', fontSize: '0.875rem' }}>
+              Keine Objekte gefunden
+            </div>
+          )}
+        </div>
+      )}
     </AppLayout>
   )
 }

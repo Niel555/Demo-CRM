@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import AppLayout from '@/components/layout/AppLayout'
-import { mockDeals } from '@/lib/mock-data'
+import { createClient } from '@/lib/supabase/client'
 import { Deal, DealStatus } from '@/types'
 import { Search, Plus, TrendingUp, MapPin, User } from 'lucide-react'
 
@@ -67,23 +67,37 @@ function DealCard({ deal, color }: { deal: Deal; color: string }) {
 }
 
 export default function DealsPage() {
+  const [deals, setDeals] = useState<Deal[]>([])
+  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [view, setView] = useState<'kanban' | 'list'>('kanban')
 
+  useEffect(() => {
+    const supabase = createClient()
+    supabase
+      .from('deals')
+      .select('*, contact:contacts(*), property:properties(*)')
+      .order('created_at', { ascending: false })
+      .then(({ data }) => {
+        setDeals((data ?? []) as Deal[])
+        setLoading(false)
+      })
+  }, [])
+
   const filtered = search
-    ? mockDeals.filter(d =>
+    ? deals.filter(d =>
         d.contact.name.toLowerCase().includes(search.toLowerCase()) ||
         d.property.title.toLowerCase().includes(search.toLowerCase())
       )
-    : mockDeals
+    : deals
 
-  const totalValue = mockDeals.filter(d => d.status === 'won').reduce((s, d) => s + d.commission, 0)
-  const pipelineValue = mockDeals.filter(d => !['won', 'lost'].includes(d.status)).reduce((s, d) => s + d.value, 0)
+  const totalValue = deals.filter(d => d.status === 'won').reduce((s, d) => s + d.commission, 0)
+  const pipelineValue = deals.filter(d => !['won', 'lost'].includes(d.status)).reduce((s, d) => s + d.value, 0)
 
   return (
     <AppLayout
       title="Deals"
-      subtitle={`${mockDeals.length} Deals im System`}
+      subtitle={loading ? 'Wird geladen…' : `${deals.length} Deals im System`}
       actions={
         <div style={{ display: 'flex', gap: '8px' }}>
           <div style={{ display: 'flex', backgroundColor: '#111111', border: '1px solid #1e1e1e', borderRadius: '8px', padding: '3px', gap: '2px' }}>
@@ -175,8 +189,15 @@ export default function DealsPage() {
         </div>
       </div>
 
+      {/* Loading */}
+      {loading && (
+        <div style={{ padding: '80px', textAlign: 'center', color: '#444444', fontSize: '0.875rem' }}>
+          Wird geladen…
+        </div>
+      )}
+
       {/* Kanban View */}
-      {view === 'kanban' && (
+      {!loading && view === 'kanban' && (
         <div style={{ display: 'flex', gap: '12px', overflowX: 'auto', paddingBottom: '8px' }}>
           {columns.map(col => {
             const colDeals = filtered.filter(d => d.status === col.status)
@@ -250,7 +271,7 @@ export default function DealsPage() {
       )}
 
       {/* List View */}
-      {view === 'list' && (
+      {!loading && view === 'list' && (
         <div style={{ backgroundColor: '#111111', border: '1px solid #1e1e1e', borderRadius: '10px', overflow: 'hidden' }}>
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 2fr 1fr 1fr 1fr', padding: '12px 20px', borderBottom: '1px solid #1c1c1c' }}>
             {['Kontakt', 'Objekt', 'Wert', 'Status', 'Provision'].map(h => (
@@ -259,6 +280,11 @@ export default function DealsPage() {
               </span>
             ))}
           </div>
+          {filtered.length === 0 && (
+            <div style={{ padding: '48px', textAlign: 'center', color: '#444444', fontSize: '0.875rem' }}>
+              Keine Deals gefunden
+            </div>
+          )}
           {filtered.map((deal, i) => {
             const col = columns.find(c => c.status === deal.status)!
             return (

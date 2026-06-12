@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import AppLayout from '@/components/layout/AppLayout'
-import { mockViewings } from '@/lib/mock-data'
-import { ViewingStatus } from '@/types'
+import { createClient } from '@/lib/supabase/client'
+import { Viewing, ViewingStatus } from '@/types'
 import { Search, Plus, Clock, Calendar, CheckCircle, XCircle, AlarmClock } from 'lucide-react'
 
 const statusConfig: Record<ViewingStatus, { label: string; color: string; bg: string; icon: React.ComponentType<{ size: number; color: string }> }> = {
@@ -31,10 +31,24 @@ function formatDate(dateStr: string) {
 }
 
 export default function ViewingsPage() {
+  const [viewings, setViewings] = useState<Viewing[]>([])
+  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
 
-  const filtered = mockViewings.filter(v => {
+  useEffect(() => {
+    const supabase = createClient()
+    supabase
+      .from('viewings')
+      .select('*, contact:contacts(*), property:properties(*), deal:deals(id, status)')
+      .order('date', { ascending: true })
+      .then(({ data }) => {
+        setViewings((data ?? []) as Viewing[])
+        setLoading(false)
+      })
+  }, [])
+
+  const filtered = viewings.filter(v => {
     const matchStatus = statusFilter === 'all' || v.status === statusFilter
     const matchSearch = !search ||
       v.contact.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -46,14 +60,14 @@ export default function ViewingsPage() {
     new Date(a.date + 'T' + a.time).getTime() - new Date(b.date + 'T' + b.time).getTime()
   )
 
-  const scheduled = mockViewings.filter(v => v.status === 'scheduled').length
-  const completed = mockViewings.filter(v => v.status === 'completed').length
-  const cancelled = mockViewings.filter(v => v.status === 'cancelled').length
+  const scheduled = viewings.filter(v => v.status === 'scheduled').length
+  const completed = viewings.filter(v => v.status === 'completed').length
+  const cancelled = viewings.filter(v => v.status === 'cancelled').length
 
   return (
     <AppLayout
       title="Besichtigungen"
-      subtitle={`${mockViewings.length} Termine insgesamt`}
+      subtitle={loading ? 'Wird geladen…' : `${viewings.length} Termine insgesamt`}
       actions={
         <button
           style={{
@@ -156,100 +170,109 @@ export default function ViewingsPage() {
         </div>
       </div>
 
+      {/* Loading */}
+      {loading && (
+        <div style={{ padding: '80px', textAlign: 'center', color: '#444444', fontSize: '0.875rem' }}>
+          Wird geladen…
+        </div>
+      )}
+
       {/* Viewings List */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        {sorted.map(viewing => {
-          const sc = statusConfig[viewing.status]
-          const StatusIcon = sc.icon
-          return (
-            <div
-              key={viewing.id}
-              style={{
-                backgroundColor: '#111111',
-                border: '1px solid #1e1e1e',
-                borderRadius: '10px',
-                padding: '16px 20px',
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: '16px',
-                cursor: 'pointer',
-                transition: 'border-color 0.1s',
-              }}
-              onMouseEnter={e => ((e.currentTarget as HTMLElement).style.borderColor = '#2a2a2a')}
-              onMouseLeave={e => ((e.currentTarget as HTMLElement).style.borderColor = '#1e1e1e')}
-            >
-              {/* Date Block */}
+      {!loading && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {sorted.map(viewing => {
+            const sc = statusConfig[viewing.status]
+            const StatusIcon = sc.icon
+            return (
               <div
+                key={viewing.id}
                 style={{
-                  backgroundColor: '#181818',
-                  border: '1px solid #222222',
-                  borderRadius: '8px',
-                  padding: '10px 14px',
-                  textAlign: 'center',
-                  minWidth: '72px',
-                  flexShrink: 0,
+                  backgroundColor: '#111111',
+                  border: '1px solid #1e1e1e',
+                  borderRadius: '10px',
+                  padding: '16px 20px',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '16px',
+                  cursor: 'pointer',
+                  transition: 'border-color 0.1s',
                 }}
+                onMouseEnter={e => ((e.currentTarget as HTMLElement).style.borderColor = '#2a2a2a')}
+                onMouseLeave={e => ((e.currentTarget as HTMLElement).style.borderColor = '#1e1e1e')}
               >
-                <div style={{ color: '#6366f1', fontSize: '0.6875rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  {formatDate(viewing.date)}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', marginTop: '4px' }}>
-                  <Clock size={11} color="#555555" />
-                  <span style={{ color: '#f59e0b', fontSize: '0.875rem', fontWeight: 700 }}>{viewing.time}</span>
-                </div>
-              </div>
-
-              {/* Content */}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px', flexWrap: 'wrap' }}>
-                  <span style={{ color: '#eeeeee', fontSize: '0.9375rem', fontWeight: 600 }}>
-                    {viewing.contact.name}
-                  </span>
-                  <span style={{ color: '#444444', fontSize: '0.875rem' }}>→</span>
-                  <span style={{ color: '#888888', fontSize: '0.875rem' }}>{viewing.property.title}</span>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-                  <Calendar size={12} color="#444444" />
-                  <span style={{ color: '#555555', fontSize: '0.75rem' }}>
-                    {new Date(viewing.date).toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-                  </span>
-                </div>
-
-                {viewing.notes && (
-                  <p style={{ color: '#555555', fontSize: '0.8125rem', margin: '6px 0 0', lineHeight: 1.4 }}>
-                    {viewing.notes}
-                  </p>
-                )}
-              </div>
-
-              {/* Status */}
-              <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                {/* Date Block */}
                 <div
                   style={{
-                    backgroundColor: sc.bg,
-                    border: `1px solid ${sc.color}33`,
-                    borderRadius: '20px',
-                    padding: '5px 10px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
+                    backgroundColor: '#181818',
+                    border: '1px solid #222222',
+                    borderRadius: '8px',
+                    padding: '10px 14px',
+                    textAlign: 'center',
+                    minWidth: '72px',
+                    flexShrink: 0,
                   }}
                 >
-                  <StatusIcon size={13} color={sc.color} />
-                  <span style={{ color: sc.color, fontSize: '0.75rem', fontWeight: 600 }}>{sc.label}</span>
+                  <div style={{ color: '#6366f1', fontSize: '0.6875rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    {formatDate(viewing.date)}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', marginTop: '4px' }}>
+                    <Clock size={11} color="#555555" />
+                    <span style={{ color: '#f59e0b', fontSize: '0.875rem', fontWeight: 700 }}>{viewing.time}</span>
+                  </div>
+                </div>
+
+                {/* Content */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px', flexWrap: 'wrap' }}>
+                    <span style={{ color: '#eeeeee', fontSize: '0.9375rem', fontWeight: 600 }}>
+                      {viewing.contact.name}
+                    </span>
+                    <span style={{ color: '#444444', fontSize: '0.875rem' }}>→</span>
+                    <span style={{ color: '#888888', fontSize: '0.875rem' }}>{viewing.property.title}</span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                    <Calendar size={12} color="#444444" />
+                    <span style={{ color: '#555555', fontSize: '0.75rem' }}>
+                      {new Date(viewing.date).toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                    </span>
+                  </div>
+
+                  {viewing.notes && (
+                    <p style={{ color: '#555555', fontSize: '0.8125rem', margin: '6px 0 0', lineHeight: 1.4 }}>
+                      {viewing.notes}
+                    </p>
+                  )}
+                </div>
+
+                {/* Status */}
+                <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div
+                    style={{
+                      backgroundColor: sc.bg,
+                      border: `1px solid ${sc.color}33`,
+                      borderRadius: '20px',
+                      padding: '5px 10px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    <StatusIcon size={13} color={sc.color} />
+                    <span style={{ color: sc.color, fontSize: '0.75rem', fontWeight: 600 }}>{sc.label}</span>
+                  </div>
                 </div>
               </div>
-            </div>
-          )
-        })}
+            )
+          })}
 
-        {sorted.length === 0 && (
-          <div style={{ padding: '48px', textAlign: 'center', color: '#444444', fontSize: '0.875rem', backgroundColor: '#111111', borderRadius: '10px', border: '1px solid #1e1e1e' }}>
-            Keine Besichtigungen gefunden
-          </div>
-        )}
-      </div>
+          {sorted.length === 0 && (
+            <div style={{ padding: '48px', textAlign: 'center', color: '#444444', fontSize: '0.875rem', backgroundColor: '#111111', borderRadius: '10px', border: '1px solid #1e1e1e' }}>
+              Keine Besichtigungen gefunden
+            </div>
+          )}
+        </div>
+      )}
     </AppLayout>
   )
 }

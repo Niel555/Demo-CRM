@@ -1,5 +1,6 @@
 import AppLayout from '@/components/layout/AppLayout'
-import { mockContacts, mockDeals, mockProperties, mockViewings } from '@/lib/mock-data'
+import { createClient } from '@/lib/supabase/server'
+import { Contact, Deal, Property, Viewing } from '@/types'
 import { TrendingUp, Users, Building2, CalendarDays, Euro, ArrowRight } from 'lucide-react'
 import Link from 'next/link'
 
@@ -27,12 +28,31 @@ const dealStatusColor: Record<string, { bg: string; text: string }> = {
   lost: { bg: 'rgba(239,68,68,0.12)', text: '#ef4444' },
 }
 
-export default function DashboardPage() {
-  const openDeals = mockDeals.filter(d => !['won', 'lost'].includes(d.status))
-  const wonDeals = mockDeals.filter(d => d.status === 'won')
+export default async function DashboardPage() {
+  const supabase = await createClient()
+
+  const [
+    { data: contactsData },
+    { data: dealsData },
+    { data: propertiesData },
+    { data: viewingsData },
+  ] = await Promise.all([
+    supabase.from('contacts').select('*'),
+    supabase.from('deals').select('*, contact:contacts(*), property:properties(*)'),
+    supabase.from('properties').select('*'),
+    supabase.from('viewings').select('*, contact:contacts(*), property:properties(*)'),
+  ])
+
+  const contacts = (contactsData ?? []) as Contact[]
+  const deals = (dealsData ?? []) as Deal[]
+  const properties = (propertiesData ?? []) as Property[]
+  const viewings = (viewingsData ?? []) as Viewing[]
+
+  const openDeals = deals.filter(d => !['won', 'lost'].includes(d.status))
+  const wonDeals = deals.filter(d => d.status === 'won')
   const totalRevenue = wonDeals.reduce((sum, d) => sum + d.commission, 0)
-  const upcomingViewings = mockViewings.filter(v => v.status === 'scheduled')
-  const availableProperties = mockProperties.filter(p => p.status === 'available')
+  const upcomingViewings = viewings.filter(v => v.status === 'scheduled')
+  const availableProperties = properties.filter(p => p.status === 'available')
 
   const kpis = [
     {
@@ -45,11 +65,11 @@ export default function DashboardPage() {
     },
     {
       label: 'Aktive Kontakte',
-      value: mockContacts.filter(c => c.status === 'active').length,
+      value: contacts.filter(c => c.status === 'active').length,
       icon: Users,
       color: '#3b82f6',
       bg: 'rgba(59,130,246,0.1)',
-      sub: `${mockContacts.length} gesamt`,
+      sub: `${contacts.length} gesamt`,
     },
     {
       label: 'Verfügbare Objekte',
@@ -57,7 +77,7 @@ export default function DashboardPage() {
       icon: Building2,
       color: '#22c55e',
       bg: 'rgba(34,197,94,0.1)',
-      sub: `${mockProperties.length} gesamt`,
+      sub: `${properties.length} gesamt`,
     },
     {
       label: 'Besichtigungen',
@@ -65,24 +85,15 @@ export default function DashboardPage() {
       icon: CalendarDays,
       color: '#f59e0b',
       bg: 'rgba(245,158,11,0.1)',
-      sub: 'diese Woche',
-    },
-    {
-      label: 'Provision gesamt',
-      value: formatPrice(totalRevenue),
-      icon: Euro,
-      color: '#a855f7',
-      bg: 'rgba(168,85,247,0.1)',
-      sub: `${wonDeals.length} abgeschlossene Deals`,
-      wide: true,
+      sub: 'geplant',
     },
   ]
 
-  const recentDeals = [...mockDeals].sort((a, b) =>
+  const recentDeals = [...deals].sort((a, b) =>
     new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   ).slice(0, 5)
 
-  const nextViewings = mockViewings
+  const nextViewings = viewings
     .filter(v => v.status === 'scheduled')
     .sort((a, b) => new Date(a.date + 'T' + a.time).getTime() - new Date(b.date + 'T' + b.time).getTime())
     .slice(0, 4)
@@ -94,7 +105,7 @@ export default function DashboardPage() {
     >
       {/* KPI Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '24px' }}>
-        {kpis.slice(0, 4).map(kpi => (
+        {kpis.map(kpi => (
           <div
             key={kpi.label}
             style={{
@@ -188,6 +199,11 @@ export default function DashboardPage() {
             </Link>
           </div>
           <div>
+            {recentDeals.length === 0 && (
+              <div style={{ padding: '32px 20px', textAlign: 'center', color: '#444444', fontSize: '0.875rem' }}>
+                Keine Deals vorhanden
+              </div>
+            )}
             {recentDeals.map((deal, i) => {
               const sc = dealStatusColor[deal.status]
               return (

@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import AppLayout from '@/components/layout/AppLayout'
-import { mockContacts } from '@/lib/mock-data'
+import { createClient } from '@/lib/supabase/client'
 import { Contact, ContactType, ContactStatus } from '@/types'
 import { Search, Plus, Mail, Phone, UserCheck, UserX, User } from 'lucide-react'
 
@@ -43,11 +43,21 @@ const filterOptions = [
 ]
 
 export default function ContactsPage() {
+  const [contacts, setContacts] = useState<Contact[]>([])
+  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState<string>('all')
   const [selected, setSelected] = useState<Contact | null>(null)
 
-  const filtered = mockContacts.filter(c => {
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.from('contacts').select('*').order('created_at', { ascending: false }).then(({ data }) => {
+      setContacts((data ?? []) as Contact[])
+      setLoading(false)
+    })
+  }, [])
+
+  const filtered = contacts.filter(c => {
     const matchType = typeFilter === 'all' || c.type === typeFilter
     const matchSearch = !search ||
       c.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -59,7 +69,7 @@ export default function ContactsPage() {
   return (
     <AppLayout
       title="Kontakte"
-      subtitle={`${mockContacts.length} Kontakte insgesamt`}
+      subtitle={loading ? 'Wird geladen…' : `${contacts.length} Kontakte insgesamt`}
       actions={
         <button
           style={{
@@ -148,8 +158,15 @@ export default function ContactsPage() {
           ))}
         </div>
 
+        {/* Loading */}
+        {loading && (
+          <div style={{ padding: '48px', textAlign: 'center', color: '#444444', fontSize: '0.875rem' }}>
+            Wird geladen…
+          </div>
+        )}
+
         {/* Rows */}
-        {filtered.map((contact, i) => {
+        {!loading && filtered.map((contact, i) => {
           const tc = typeColor[contact.type]
           const sc = statusColor[contact.status]
           return (
@@ -227,7 +244,7 @@ export default function ContactsPage() {
           )
         })}
 
-        {filtered.length === 0 && (
+        {!loading && filtered.length === 0 && (
           <div style={{ padding: '48px', textAlign: 'center', color: '#444444', fontSize: '0.875rem' }}>
             Keine Kontakte gefunden
           </div>
