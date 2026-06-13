@@ -118,6 +118,34 @@ export default function AnalyticsPage() {
 
       {!loading && (
         <>
+          {/* Count Stats */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '16px' }}>
+            {[
+              { label: 'Kontakte gesamt', value: contacts.length, sub: `${contacts.filter(c => c.status === 'active').length} aktiv`, color: '#3b82f6' },
+              { label: 'Objekte gesamt', value: properties.length, sub: `${properties.filter(p => p.status === 'available').length} verfügbar`, color: '#22c55e' },
+              { label: 'Deals gesamt', value: deals.length, sub: `${wonDeals.length} gewonnen`, color: '#a855f7' },
+            ].map(item => (
+              <div
+                key={item.label}
+                style={{
+                  backgroundColor: '#111111',
+                  border: '1px solid #1e1e1e',
+                  borderRadius: '10px',
+                  padding: '16px 20px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}
+              >
+                <div>
+                  <div style={{ color: '#666666', fontSize: '0.8125rem', marginBottom: '6px' }}>{item.label}</div>
+                  <div style={{ fontSize: '2rem', fontWeight: 700, color: item.color, lineHeight: 1 }}>{item.value}</div>
+                </div>
+                <div style={{ color: '#444444', fontSize: '0.8125rem' }}>{item.sub}</div>
+              </div>
+            ))}
+          </div>
+
           {/* KPI Row */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '24px' }}>
             {[

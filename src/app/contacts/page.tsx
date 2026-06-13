@@ -4,8 +4,8 @@ import { useState, useEffect } from 'react'
 import AppLayout from '@/components/layout/AppLayout'
 import ContactModal from '@/components/contacts/ContactModal'
 import { createClient } from '@/lib/supabase/client'
-import { Contact, ContactType, ContactStatus } from '@/types'
-import { Search, Plus, Mail, Phone, UserCheck, UserX, User, Pencil } from 'lucide-react'
+import { Contact, ContactType, ContactStatus, DealStatus, ViewingStatus } from '@/types'
+import { Search, Plus, Mail, Phone, UserCheck, UserX, User, Pencil, TrendingUp, Calendar } from 'lucide-react'
 
 const typeLabel: Record<ContactType, string> = {
   buyer: 'Käufer',
@@ -31,6 +31,43 @@ const statusLabel: Record<ContactStatus, string> = {
   closed: 'Abgeschlossen',
 }
 
+const dealStatusLabel: Record<DealStatus, string> = {
+  lead: 'Lead',
+  viewing: 'Besichtigung',
+  offer: 'Angebot',
+  won: 'Gewonnen',
+  lost: 'Verloren',
+}
+
+const dealStatusColor: Record<DealStatus, string> = {
+  lead: '#3b82f6',
+  viewing: '#f59e0b',
+  offer: '#a855f7',
+  won: '#22c55e',
+  lost: '#ef4444',
+}
+
+const viewingStatusLabel: Record<ViewingStatus, string> = {
+  scheduled: 'Geplant',
+  completed: 'Abgeschlossen',
+  cancelled: 'Abgesagt',
+}
+
+type ContactDeal = {
+  id: string
+  status: DealStatus
+  value: number
+  property: { id: string; title: string; city: string } | null
+}
+
+type ContactViewing = {
+  id: string
+  date: string
+  time: string
+  status: ViewingStatus
+  property: { id: string; title: string } | null
+}
+
 function formatBudget(n?: number | null) {
   if (!n) return '—'
   return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n)
@@ -50,6 +87,9 @@ export default function ContactsPage() {
   const [typeFilter, setTypeFilter] = useState<string>('all')
   const [selected, setSelected] = useState<Contact | null>(null)
   const [modal, setModal] = useState<{ open: boolean; contact: Contact | null }>({ open: false, contact: null })
+  const [relDeals, setRelDeals] = useState<ContactDeal[]>([])
+  const [relViewings, setRelViewings] = useState<ContactViewing[]>([])
+  const [relLoading, setRelLoading] = useState(false)
 
   useEffect(() => {
     const supabase = createClient()
@@ -63,22 +103,35 @@ export default function ContactsPage() {
       })
   }, [])
 
-  function openCreate() {
-    setModal({ open: true, contact: null })
-  }
+  useEffect(() => {
+    if (!selected) { setRelDeals([]); setRelViewings([]); return }
+    setRelLoading(true)
+    const supabase = createClient()
+    Promise.all([
+      supabase
+        .from('deals')
+        .select('id, status, value, property:properties(id, title, city)')
+        .eq('contact_id', selected.id)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('viewings')
+        .select('id, date, time, status, property:properties(id, title)')
+        .eq('contact_id', selected.id)
+        .order('date', { ascending: false }),
+    ]).then(([d, v]) => {
+      setRelDeals((d.data ?? []) as unknown as ContactDeal[])
+      setRelViewings((v.data ?? []) as unknown as ContactViewing[])
+      setRelLoading(false)
+    })
+  }, [selected?.id])
 
-  function openEdit(contact: Contact) {
-    setModal({ open: true, contact })
-  }
+  function openCreate() { setModal({ open: true, contact: null }) }
+  function openEdit(contact: Contact) { setModal({ open: true, contact }) }
 
   function handleSaved(saved: Contact) {
     setContacts(prev => {
       const idx = prev.findIndex(c => c.id === saved.id)
-      if (idx >= 0) {
-        const next = [...prev]
-        next[idx] = saved
-        return next
-      }
+      if (idx >= 0) { const next = [...prev]; next[idx] = saved; return next }
       return [saved, ...prev]
     })
     if (selected?.id === saved.id) setSelected(saved)
@@ -289,13 +342,14 @@ export default function ContactsPage() {
               backgroundColor: '#111111',
               border: '1px solid #242424',
               borderRadius: '12px',
-              padding: '20px',
               boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
               zIndex: 50,
+              maxHeight: 'calc(100vh - 120px)',
+              overflowY: 'auto',
             }}
           >
             {/* Panel Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+            <div style={{ padding: '20px', borderBottom: '1px solid #1c1c1c', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
                 <h3 style={{ margin: 0, color: '#eeeeee', fontSize: '1rem', fontWeight: 600 }}>{selected.name}</h3>
                 <span style={{
@@ -320,7 +374,7 @@ export default function ContactsPage() {
             </div>
 
             {/* Contact Info */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #1c1c1c', display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <Mail size={14} color="#555555" />
                 <span style={{ color: '#aaaaaa', fontSize: '0.875rem' }}>{selected.email}</span>
@@ -339,43 +393,106 @@ export default function ContactsPage() {
                 <UserX size={14} color="#555555" />
                 <span style={{ color: '#aaaaaa', fontSize: '0.875rem' }}>Status: {statusLabel[selected.status]}</span>
               </div>
+              {selected.notes && (
+                <div style={{ marginTop: '4px' }}>
+                  <div style={{ color: '#555555', fontSize: '0.75rem', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Notizen</div>
+                  <p style={{ color: '#888888', fontSize: '0.8125rem', lineHeight: 1.5, margin: 0 }}>{selected.notes}</p>
+                </div>
+              )}
             </div>
 
-            {selected.notes && (
-              <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #1c1c1c' }}>
-                <div style={{ color: '#555555', fontSize: '0.75rem', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Notizen</div>
-                <p style={{ color: '#888888', fontSize: '0.8125rem', lineHeight: 1.5, margin: 0 }}>{selected.notes}</p>
+            {/* Related Deals */}
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #1c1c1c' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
+                <TrendingUp size={13} color="#555555" />
+                <span style={{ color: '#666666', fontSize: '0.75rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Deals ({relDeals.length})
+                </span>
               </div>
-            )}
+              {relLoading ? (
+                <div style={{ color: '#444444', fontSize: '0.8125rem' }}>Laden…</div>
+              ) : relDeals.length === 0 ? (
+                <div style={{ color: '#444444', fontSize: '0.8125rem' }}>Keine Deals</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {relDeals.map(d => (
+                    <div key={d.id} style={{ backgroundColor: '#181818', borderRadius: '6px', padding: '8px 10px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ color: '#cccccc', fontSize: '0.8125rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '140px' }}>
+                          {d.property?.title ?? '—'}
+                        </span>
+                        <span style={{ color: dealStatusColor[d.status], fontSize: '0.75rem', fontWeight: 600, flexShrink: 0 }}>
+                          {dealStatusLabel[d.status]}
+                        </span>
+                      </div>
+                      <div style={{ color: '#6366f1', fontSize: '0.8125rem', fontWeight: 600, marginTop: '2px' }}>
+                        {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(d.value)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Related Viewings */}
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #1c1c1c' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
+                <Calendar size={13} color="#555555" />
+                <span style={{ color: '#666666', fontSize: '0.75rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Besichtigungen ({relViewings.length})
+                </span>
+              </div>
+              {relLoading ? (
+                <div style={{ color: '#444444', fontSize: '0.8125rem' }}>Laden…</div>
+              ) : relViewings.length === 0 ? (
+                <div style={{ color: '#444444', fontSize: '0.8125rem' }}>Keine Besichtigungen</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {relViewings.map(v => (
+                    <div key={v.id} style={{ backgroundColor: '#181818', borderRadius: '6px', padding: '8px 10px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ color: '#cccccc', fontSize: '0.8125rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '140px' }}>
+                          {v.property?.title ?? '—'}
+                        </span>
+                        <span style={{ color: '#555555', fontSize: '0.75rem' }}>{viewingStatusLabel[v.status]}</span>
+                      </div>
+                      <div style={{ color: '#f59e0b', fontSize: '0.75rem', marginTop: '2px' }}>
+                        {new Date(v.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })} · {v.time.slice(0, 5)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
             {/* Edit Button */}
-            <button
-              onClick={() => openEdit(selected)}
-              style={{
-                marginTop: '16px',
-                width: '100%',
-                backgroundColor: '#1a1a1a',
-                border: '1px solid #2a2a2a',
-                borderRadius: '8px',
-                color: '#cccccc',
-                cursor: 'pointer',
-                fontSize: '0.875rem',
-                fontWeight: 500,
-                padding: '9px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '7px',
-              }}
-            >
-              <Pencil size={14} />
-              Bearbeiten
-            </button>
+            <div style={{ padding: '16px 20px' }}>
+              <button
+                onClick={() => openEdit(selected)}
+                style={{
+                  width: '100%',
+                  backgroundColor: '#1a1a1a',
+                  border: '1px solid #2a2a2a',
+                  borderRadius: '8px',
+                  color: '#cccccc',
+                  cursor: 'pointer',
+                  fontSize: '0.875rem',
+                  fontWeight: 500,
+                  padding: '9px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '7px',
+                }}
+              >
+                <Pencil size={14} />
+                Bearbeiten
+              </button>
+            </div>
           </div>
         )}
       </AppLayout>
 
-      {/* Modal */}
       {modal.open && (
         <ContactModal
           contact={modal.contact}

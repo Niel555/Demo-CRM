@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import AppLayout from '@/components/layout/AppLayout'
+import ViewingModal from '@/components/viewings/ViewingModal'
 import { createClient } from '@/lib/supabase/client'
 import { Viewing, ViewingStatus } from '@/types'
 import { Search, Plus, Clock, Calendar, CheckCircle, XCircle, AlarmClock } from 'lucide-react'
@@ -35,6 +36,7 @@ export default function ViewingsPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [modal, setModal] = useState<{ open: boolean; viewing: Viewing | null }>({ open: false, viewing: null })
 
   useEffect(() => {
     const supabase = createClient()
@@ -47,6 +49,23 @@ export default function ViewingsPage() {
         setLoading(false)
       })
   }, [])
+
+  function openCreate() { setModal({ open: true, viewing: null }) }
+  function openEdit(v: Viewing) { setModal({ open: true, viewing: v }) }
+
+  function handleSaved(saved: Viewing) {
+    setViewings(prev => {
+      const idx = prev.findIndex(v => v.id === saved.id)
+      if (idx >= 0) { const next = [...prev]; next[idx] = saved; return next }
+      return [saved, ...prev]
+    })
+    setModal({ open: false, viewing: null })
+  }
+
+  function handleDeleted(id: string) {
+    setViewings(prev => prev.filter(v => v.id !== id))
+    setModal({ open: false, viewing: null })
+  }
 
   const filtered = viewings.filter(v => {
     const matchStatus = statusFilter === 'all' || v.status === statusFilter
@@ -65,51 +84,52 @@ export default function ViewingsPage() {
   const cancelled = viewings.filter(v => v.status === 'cancelled').length
 
   return (
-    <AppLayout
-      title="Besichtigungen"
-      subtitle={loading ? 'Wird geladen…' : `${viewings.length} Termine insgesamt`}
-      actions={
-        <button
-          style={{
-            backgroundColor: '#6366f1',
-            border: 'none',
-            borderRadius: '8px',
-            color: 'white',
-            cursor: 'pointer',
-            fontSize: '0.875rem',
-            fontWeight: 500,
-            padding: '8px 14px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-          }}
-        >
-          <Plus size={16} />
-          Neue Besichtigung
-        </button>
-      }
-    >
-      {/* Stats */}
-      <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
-        {[
-          { label: 'Geplant', value: scheduled, color: '#3b82f6', bg: 'rgba(59,130,246,0.1)' },
-          { label: 'Abgeschlossen', value: completed, color: '#22c55e', bg: 'rgba(34,197,94,0.1)' },
-          { label: 'Abgesagt', value: cancelled, color: '#ef4444', bg: 'rgba(239,68,68,0.1)' },
-        ].map(s => (
-          <div
-            key={s.label}
+    <>
+      <AppLayout
+        title="Besichtigungen"
+        subtitle={loading ? 'Wird geladen…' : `${viewings.length} Termine insgesamt`}
+        actions={
+          <button
+            onClick={openCreate}
             style={{
-              backgroundColor: '#111111',
-              border: '1px solid #1e1e1e',
+              backgroundColor: '#6366f1',
+              border: 'none',
               borderRadius: '8px',
-              padding: '12px 18px',
+              color: 'white',
+              cursor: 'pointer',
+              fontSize: '0.875rem',
+              fontWeight: 500,
+              padding: '8px 14px',
               display: 'flex',
               alignItems: 'center',
-              gap: '12px',
+              gap: '6px',
             }}
           >
+            <Plus size={16} />
+            Neue Besichtigung
+          </button>
+        }
+      >
+        {/* Stats */}
+        <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
+          {[
+            { label: 'Geplant', value: scheduled, color: '#3b82f6', bg: 'rgba(59,130,246,0.1)' },
+            { label: 'Abgeschlossen', value: completed, color: '#22c55e', bg: 'rgba(34,197,94,0.1)' },
+            { label: 'Abgesagt', value: cancelled, color: '#ef4444', bg: 'rgba(239,68,68,0.1)' },
+          ].map(s => (
             <div
+              key={s.label}
               style={{
+                backgroundColor: '#111111',
+                border: '1px solid #1e1e1e',
+                borderRadius: '8px',
+                padding: '12px 18px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+              }}
+            >
+              <div style={{
                 width: '36px',
                 height: '36px',
                 borderRadius: '8px',
@@ -117,162 +137,170 @@ export default function ViewingsPage() {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-              }}
-            >
-              <span style={{ fontSize: '1rem', fontWeight: 700, color: s.color }}>{s.value}</span>
+              }}>
+                <span style={{ fontSize: '1rem', fontWeight: 700, color: s.color }}>{s.value}</span>
+              </div>
+              <span style={{ color: '#777777', fontSize: '0.875rem' }}>{s.label}</span>
             </div>
-            <span style={{ color: '#777777', fontSize: '0.875rem' }}>{s.label}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* Filters */}
-      <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', alignItems: 'center' }}>
-        <div style={{ position: 'relative', flex: 1, maxWidth: '320px' }}>
-          <Search size={15} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#555555' }} />
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Kontakt oder Objekt suchen..."
-            style={{
-              backgroundColor: '#111111',
-              border: '1px solid #242424',
-              borderRadius: '8px',
-              color: '#eeeeee',
-              fontSize: '0.875rem',
-              padding: '8px 12px 8px 32px',
-              width: '100%',
-              outline: 'none',
-            }}
-          />
-        </div>
-
-        <div style={{ display: 'flex', gap: '4px', backgroundColor: '#111111', border: '1px solid #1e1e1e', borderRadius: '8px', padding: '4px' }}>
-          {filterOptions.map(opt => (
-            <button
-              key={opt.value}
-              onClick={() => setStatusFilter(opt.value)}
-              style={{
-                backgroundColor: statusFilter === opt.value ? '#1e1e1e' : 'transparent',
-                border: 'none',
-                borderRadius: '6px',
-                color: statusFilter === opt.value ? '#eeeeee' : '#666666',
-                cursor: 'pointer',
-                fontSize: '0.8125rem',
-                fontWeight: statusFilter === opt.value ? 500 : 400,
-                padding: '6px 12px',
-                transition: 'all 0.1s',
-              }}
-            >
-              {opt.label}
-            </button>
           ))}
         </div>
-      </div>
 
-      {/* Loading */}
-      {loading && (
-        <div style={{ padding: '80px', textAlign: 'center', color: '#444444', fontSize: '0.875rem' }}>
-          Wird geladen…
-        </div>
-      )}
+        {/* Filters */}
+        <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', alignItems: 'center' }}>
+          <div style={{ position: 'relative', flex: 1, maxWidth: '320px' }}>
+            <Search size={15} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#555555' }} />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Kontakt oder Objekt suchen..."
+              style={{
+                backgroundColor: '#111111',
+                border: '1px solid #242424',
+                borderRadius: '8px',
+                color: '#eeeeee',
+                fontSize: '0.875rem',
+                padding: '8px 12px 8px 32px',
+                width: '100%',
+                outline: 'none',
+              }}
+            />
+          </div>
 
-      {/* Viewings List */}
-      {!loading && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {sorted.map(viewing => {
-            const sc = statusConfig[viewing.status]
-            const StatusIcon = sc.icon
-            return (
-              <div
-                key={viewing.id}
+          <div style={{ display: 'flex', gap: '4px', backgroundColor: '#111111', border: '1px solid #1e1e1e', borderRadius: '8px', padding: '4px' }}>
+            {filterOptions.map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => setStatusFilter(opt.value)}
                 style={{
-                  backgroundColor: '#111111',
-                  border: '1px solid #1e1e1e',
-                  borderRadius: '10px',
-                  padding: '16px 20px',
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: '16px',
+                  backgroundColor: statusFilter === opt.value ? '#1e1e1e' : 'transparent',
+                  border: 'none',
+                  borderRadius: '6px',
+                  color: statusFilter === opt.value ? '#eeeeee' : '#666666',
                   cursor: 'pointer',
-                  transition: 'border-color 0.1s',
+                  fontSize: '0.8125rem',
+                  fontWeight: statusFilter === opt.value ? 500 : 400,
+                  padding: '6px 12px',
+                  transition: 'all 0.1s',
                 }}
-                onMouseEnter={e => ((e.currentTarget as HTMLElement).style.borderColor = '#2a2a2a')}
-                onMouseLeave={e => ((e.currentTarget as HTMLElement).style.borderColor = '#1e1e1e')}
               >
-                {/* Date Block */}
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {loading && (
+          <div style={{ padding: '80px', textAlign: 'center', color: '#444444', fontSize: '0.875rem' }}>
+            Wird geladen…
+          </div>
+        )}
+
+        {!loading && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {sorted.map(viewing => {
+              const sc = statusConfig[viewing.status]
+              const StatusIcon = sc.icon
+              return (
                 <div
+                  key={viewing.id}
+                  onClick={() => openEdit(viewing)}
                   style={{
-                    backgroundColor: '#181818',
-                    border: '1px solid #222222',
-                    borderRadius: '8px',
-                    padding: '10px 14px',
-                    textAlign: 'center',
-                    minWidth: '72px',
-                    flexShrink: 0,
+                    backgroundColor: '#111111',
+                    border: '1px solid #1e1e1e',
+                    borderRadius: '10px',
+                    padding: '16px 20px',
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '16px',
+                    cursor: 'pointer',
+                    transition: 'border-color 0.1s',
                   }}
+                  onMouseEnter={e => ((e.currentTarget as HTMLElement).style.borderColor = '#2a2a2a')}
+                  onMouseLeave={e => ((e.currentTarget as HTMLElement).style.borderColor = '#1e1e1e')}
                 >
-                  <div style={{ color: '#6366f1', fontSize: '0.6875rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    {formatDate(viewing.date)}
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', marginTop: '4px' }}>
-                    <Clock size={11} color="#555555" />
-                    <span style={{ color: '#f59e0b', fontSize: '0.875rem', fontWeight: 700 }}>{viewing.time}</span>
-                  </div>
-                </div>
-
-                {/* Content */}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px', flexWrap: 'wrap' }}>
-                    <span style={{ color: '#eeeeee', fontSize: '0.9375rem', fontWeight: 600 }}>
-                      {viewing.contact.name}
-                    </span>
-                    <span style={{ color: '#444444', fontSize: '0.875rem' }}>→</span>
-                    <span style={{ color: '#888888', fontSize: '0.875rem' }}>{viewing.property.title}</span>
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-                    <Calendar size={12} color="#444444" />
-                    <span style={{ color: '#555555', fontSize: '0.75rem' }}>
-                      {new Date(viewing.date).toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-                    </span>
-                  </div>
-
-                  {viewing.notes && (
-                    <p style={{ color: '#555555', fontSize: '0.8125rem', margin: '6px 0 0', lineHeight: 1.4 }}>
-                      {viewing.notes}
-                    </p>
-                  )}
-                </div>
-
-                {/* Status */}
-                <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {/* Date Block */}
                   <div
                     style={{
-                      backgroundColor: sc.bg,
-                      border: `1px solid ${sc.color}33`,
-                      borderRadius: '20px',
-                      padding: '5px 10px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
+                      backgroundColor: '#181818',
+                      border: '1px solid #222222',
+                      borderRadius: '8px',
+                      padding: '10px 14px',
+                      textAlign: 'center',
+                      minWidth: '72px',
+                      flexShrink: 0,
                     }}
                   >
-                    <StatusIcon size={13} color={sc.color} />
-                    <span style={{ color: sc.color, fontSize: '0.75rem', fontWeight: 600 }}>{sc.label}</span>
+                    <div style={{ color: '#6366f1', fontSize: '0.6875rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      {formatDate(viewing.date)}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', marginTop: '4px' }}>
+                      <Clock size={11} color="#555555" />
+                      <span style={{ color: '#f59e0b', fontSize: '0.875rem', fontWeight: 700 }}>{viewing.time.slice(0, 5)}</span>
+                    </div>
+                  </div>
+
+                  {/* Content */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px', flexWrap: 'wrap' }}>
+                      <span style={{ color: '#eeeeee', fontSize: '0.9375rem', fontWeight: 600 }}>
+                        {viewing.contact.name}
+                      </span>
+                      <span style={{ color: '#444444', fontSize: '0.875rem' }}>→</span>
+                      <span style={{ color: '#888888', fontSize: '0.875rem' }}>{viewing.property.title}</span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                      <Calendar size={12} color="#444444" />
+                      <span style={{ color: '#555555', fontSize: '0.75rem' }}>
+                        {new Date(viewing.date).toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                      </span>
+                    </div>
+
+                    {viewing.notes && (
+                      <p style={{ color: '#555555', fontSize: '0.8125rem', margin: '6px 0 0', lineHeight: 1.4 }}>
+                        {viewing.notes}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Status */}
+                  <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <div
+                      style={{
+                        backgroundColor: sc.bg,
+                        border: `1px solid ${sc.color}33`,
+                        borderRadius: '20px',
+                        padding: '5px 10px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                      }}
+                    >
+                      <StatusIcon size={13} color={sc.color} />
+                      <span style={{ color: sc.color, fontSize: '0.75rem', fontWeight: 600 }}>{sc.label}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )
-          })}
+              )
+            })}
 
-          {sorted.length === 0 && (
-            <div style={{ padding: '48px', textAlign: 'center', color: '#444444', fontSize: '0.875rem', backgroundColor: '#111111', borderRadius: '10px', border: '1px solid #1e1e1e' }}>
-              Keine Besichtigungen gefunden
-            </div>
-          )}
-        </div>
+            {sorted.length === 0 && (
+              <div style={{ padding: '48px', textAlign: 'center', color: '#444444', fontSize: '0.875rem', backgroundColor: '#111111', borderRadius: '10px', border: '1px solid #1e1e1e' }}>
+                Keine Besichtigungen gefunden
+              </div>
+            )}
+          </div>
+        )}
+      </AppLayout>
+
+      {modal.open && (
+        <ViewingModal
+          viewing={modal.viewing}
+          onClose={() => setModal({ open: false, viewing: null })}
+          onSaved={handleSaved}
+          onDeleted={handleDeleted}
+        />
       )}
-    </AppLayout>
+    </>
   )
 }

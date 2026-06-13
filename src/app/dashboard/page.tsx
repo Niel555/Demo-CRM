@@ -54,6 +54,10 @@ export default async function DashboardPage() {
   const upcomingViewings = viewings.filter(v => v.status === 'scheduled')
   const availableProperties = properties.filter(p => p.status === 'available')
 
+  const now = new Date()
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+  const newContactsThisMonth = contacts.filter(c => c.created_at >= startOfMonth).length
+
   const kpis = [
     {
       label: 'Offene Deals',
@@ -80,12 +84,12 @@ export default async function DashboardPage() {
       sub: `${properties.length} gesamt`,
     },
     {
-      label: 'Besichtigungen',
-      value: upcomingViewings.length,
+      label: 'Neue Kontakte',
+      value: newContactsThisMonth,
       icon: CalendarDays,
       color: '#f59e0b',
       bg: 'rgba(245,158,11,0.1)',
-      sub: 'geplant',
+      sub: 'diesen Monat',
     },
   ]
 
